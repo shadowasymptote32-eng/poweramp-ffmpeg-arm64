@@ -60,7 +60,6 @@ jobs:
           --disable-programs \
           --disable-doc \
           --disable-avdevice \
-          --disable-postproc \
           --disable-avfilter \
           --disable-network \
           --disable-encoders \
