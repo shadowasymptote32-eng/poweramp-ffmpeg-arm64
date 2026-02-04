@@ -49,6 +49,7 @@ jobs:
           --arch=aarch64 \
           --cpu=armv8-a \
           --enable-cross-compile \
+          --disable-x86asm \
           --sysroot=$TOOLCHAIN/sysroot \
           --cc=$CC \
           --cxx=$CXX \
