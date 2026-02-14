@@ -1,0 +1,101 @@
+name: Build FFmpeg ARM64 for Poweramp
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        sudo apt update
+        sudo apt install -y \
+          yasm nasm pkg-config \
+          autoconf automake libtool \
+          cmake git curl unzip
+
+    - name: Configure FFmpeg (arm64-v8a)
+      run: |
+        # Point to your locally downloaded NDK
+        export NDK=/path/to/your/android-ndk-r25c
+        export TOOLCHAIN=$NDK/toolchains/llvm/prebuilt/linux-x86_64
+        export API=29
+
+        export CC=$TOOLCHAIN/bin/aarch64-linux-android$API-clang
+        export CXX=$TOOLCHAIN/bin/aarch64-linux-android$API-clang++
+        export AR=$TOOLCHAIN/bin/llvm-ar
+        export STRIP=$TOOLCHAIN/bin/llvm-strip
+        export NM=$TOOLCHAIN/bin/llvm-nm
+
+        cd ffmpeg || git clone --depth 1 https://github.com/FFmpeg/FFmpeg.git ffmpeg && cd ffmpeg
+        make clean || true  # ensure clean build
+
+        ./configure \
+          --prefix=$PWD/build \
+          --target-os=android \
+          --arch=aarch64 \
+          --cpu=armv8-a \
+          --enable-cross-compile \
+          --sysroot=$TOOLCHAIN/sysroot \
+          --cc=$CC \
+          --cxx=$CXX \
+          --ar=$AR \
+          --nm=$NM \
+          --strip=$STRIP \
+          --enable-shared \
+          --disable-static \
+          --disable-programs \
+          --disable-doc \
+          --disable-avdevice \
+          --disable-postproc \
+          --disable-avfilter \
+          --disable-network \
+          --disable-encoders \
+          --disable-muxers \
+          --enable-small \
+          --enable-pic \
+          --enable-neon \
+          --enable-swscale \
+          --extra-cflags="-O3 -fPIC" \
+          --extra-ldflags="-Wl,--gc-sections"
+
+    - name: Build FFmpeg
+      run: |
+        cd ffmpeg
+        make -j$(nproc)
+        make install
+
+    - name: Merge into libffmpeg_min.so
+      run: |
+        export NDK=/path/to/your/android-ndk-r25c
+        export TOOLCHAIN=$NDK/toolchains/llvm/prebuilt/linux-x86_64
+        export API=29
+        export CC=$TOOLCHAIN/bin/aarch64-linux-android$API-clang
+        export STRIP=$TOOLCHAIN/bin/llvm-strip
+
+        cd ffmpeg/build/lib
+
+        # Combine shared libraries into a single minimal .so
+        $CC -shared -o libffmpeg_min.so \
+          libavcodec.so \
+          libavformat.so \
+          libavutil.so \
+          libswresample.so \
+          libswscale.so \
+          -Wl,--no-undefined -Wl,--as-needed
+
+        $STRIP --strip-unneeded libffmpeg_min.so
+
+        mkdir -p out
+        mv libffmpeg_min.so out/
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: libffmpeg_min_arm64-v8a
+        path: ffmpeg/build/lib/out/libffmpeg_min.so
